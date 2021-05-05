@@ -1,0 +1,14 @@
+[Unit]
+Description=Heartbeat service
+After=network.target
+StartLimitIntervalSec=0
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=root
+ExecStart=/opt/heartbeat/heartbeat
+WorkingDirectory=/opt/heartbeat
+
+[Install]
+WantedBy=multi-user.target
