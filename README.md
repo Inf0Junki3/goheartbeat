@@ -17,15 +17,15 @@ heartbeat executable to /bin/ and the heartbeat.config file to /etc/, then creat
 ## Setting up a heartbeat.config file
 
 Once you've installed GoHeartbeat, the first thing you'll want to do is configure your heartbeats.
-Here is what a typicaly configuration file looks like:
+Here is what a typical configuration file looks like:
 
 ```json
 {
-    "HeartbeatIntervalSeconds": 30, // This is the amount of time between heartbeats.
+    "HeartbeatIntervalSeconds": 30,
     "Urls": ["http://www.google.com",
-             "https://www.google.com"], // These are the URL's you want to check. http/https work.
-    "TcpEndpoints": ["192.168.1.1:22"], // These are the services in IP:port format.
-    "TimeoutSeconds": 5 // This is the amount of time to wait for an unresponsive connection.
+             "https://www.google.com"],
+    "TcpEndpoints": ["192.168.1.1:22"],
+    "TimeoutSeconds": 5
 }
 ```
 
