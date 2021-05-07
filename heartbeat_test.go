@@ -5,6 +5,7 @@ import (
     "fmt"
     "io/ioutil"
     "os"
+    "strings"
     "sync"
     "testing"
     "time"
@@ -143,7 +144,7 @@ func TestUrlTimeout (t *testing.T) {
     waitGroup.Add(1)
     go heartbeatUrls(&waitGroup, []string{fmt.Sprintf("http://%s", testParameters.UrlServiceDoesNotExist),}, &totalIssues, time.Duration(1) * time.Second)
     waitGroup.Wait()
-    if !(len(totalIssues) == 1 && totalIssues[0] == fmt.Sprintf("Get http://%s: net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)", testParameters.UrlServiceDoesNotExist)) {
+    if !(len(totalIssues) == 1 && strings.Contains(totalIssues[0], "(Client.Timeout exceeded while awaiting headers)")) {
         print(totalIssues[0])
         t.Fatalf("The time-out did not trigger an alert.")
     }
