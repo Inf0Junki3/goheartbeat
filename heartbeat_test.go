@@ -5,6 +5,7 @@ import (
     "fmt"
     "io/ioutil"
     "os"
+    "sync"
     "testing"
     "time"
 )
@@ -17,11 +18,12 @@ type TestParameters struct {
     TcpEndpointNeverWorking string
 }
 
-var test_parameters TestParameters
+var testParameters TestParameters
+var waitGroup sync.WaitGroup
 
 func TestMain(m *testing.M) {
-    parameters_json, _ := ioutil.ReadFile("tests/test_parameters.config")
-    if err := json.Unmarshal(parameters_json, &test_parameters); err != nil {
+    parametersJson, _ := ioutil.ReadFile("tests/test_parameters.config")
+    if err := json.Unmarshal(parametersJson, &testParameters); err != nil {
         panic(err)
     }
     os.Exit(m.Run())
@@ -35,7 +37,7 @@ func TestReadConfig (t *testing.T) {
             t.Fatalf("Problem parsing default config file. JSON might be malformed.")
         }
     }()
-    config := read_config("tests/heartbeat_base.config")
+    config := readConfig("tests/heartbeat_base.config")
     
     if config.HeartbeatIntervalSeconds != 30 {
         t.Fatalf("HeartbeatIntervalSeconds did not load with the expected value.")
@@ -64,7 +66,7 @@ func TestReadConfigDoesNotExist (t *testing.T) {
             t.Fatalf("An error is expected here!")
         }
     }()
-    read_config("thisfiledoesnotexist.config")
+    readConfig("thisfiledoesnotexist.config")
 }
 
 func TestReadConfigMalformedJson (t *testing.T) {
@@ -75,11 +77,11 @@ func TestReadConfigMalformedJson (t *testing.T) {
             t.Fatalf("An error is expected here!")
         }
     }()
-    read_config("tests/heartbeat_malformed.config")
+    readConfig("tests/heartbeat_malformed.config")
 }
 
 func TestReadConfigMissingInterval (t *testing.T) {
-    config := read_config("tests/heartbeat_missing_interval.config")
+    config := readConfig("tests/heartbeat_missing_interval.config")
     if config.HeartbeatIntervalSeconds != 0 {
         t.Fatalf("A missing heartbeat interval should result in a value of 0.")
     }
@@ -93,7 +95,7 @@ func TestReadConfigMissingUrls (t *testing.T) {
             fmt.Printf("%v\n", r)
         }
     }()
-    read_config("tests/heartbeat_missing_urls.config")
+    readConfig("tests/heartbeat_missing_urls.config")
 }
 
 func TestReadConfigMissingTcpEndpoints (t *testing.T) {
@@ -104,58 +106,72 @@ func TestReadConfigMissingTcpEndpoints (t *testing.T) {
             fmt.Printf("%v\n", r)
         }
     }()
-    read_config("tests/heartbeat_missing_tcpendpoints.config")
+    readConfig("tests/heartbeat_missing_tcpendpoints.config")
 }
 
 func TestUrlBase (t *testing.T) {
-    total_issues := []string{}
-    heartbeat_urls([]string{fmt.Sprintf("http://%s", test_parameters.UrlAlwaysWorking)}, &total_issues, time.Duration(3) * time.Second)
-    if len(total_issues) > 0 {
+    totalIssues := []string{}
+    waitGroup.Add(1)
+    go heartbeatUrls(&waitGroup, []string{fmt.Sprintf("http://%s", testParameters.UrlAlwaysWorking)}, &totalIssues, time.Duration(3) * time.Second)
+    waitGroup.Wait()
+    if len(totalIssues) > 0 {
         t.Fatalf("The URL is not live as expected.")
     }
 }
 
 func TestUrlEmpty (t *testing.T) {
-    total_issues := []string{}
-    heartbeat_urls([]string{}, &total_issues, time.Duration(3) * time.Second)
+    totalIssues := []string{}
+    waitGroup.Add(1)
+    go heartbeatUrls(&waitGroup, []string{}, &totalIssues, time.Duration(3) * time.Second)
+    waitGroup.Wait()
 }
 
 func TestUrlDoesNotExist (t *testing.T) {    
-    total_issues := []string{}
-    heartbeat_urls([]string{fmt.Sprintf("http://%s", test_parameters.UrlDomainDoesNotExist),}, 
-                   &total_issues, 
+    totalIssues := []string{}
+    waitGroup.Add(1)
+    go heartbeatUrls(&waitGroup, []string{fmt.Sprintf("http://%s", testParameters.UrlDomainDoesNotExist),},
+                   &totalIssues,
                    time.Duration(1) * time.Second)
-    if !(len(total_issues) == 1 && total_issues[0] == fmt.Sprintf("Get http://%s: dial tcp: lookup www.thisdoesntexist.local: no such host", test_parameters.UrlDomainDoesNotExist)) {
+    waitGroup.Wait()
+    if !(len(totalIssues) == 1 && totalIssues[0] == fmt.Sprintf("Get http://%s: dial tcp: lookup www.thisdoesntexist.local: no such host", testParameters.UrlDomainDoesNotExist)) {
         t.Fatalf("The non-existing URL did not trigger an alert.")
     }
 }
 
 func TestUrlTimeout (t *testing.T) {    
-    total_issues := []string{}
-    heartbeat_urls([]string{fmt.Sprintf("http://%s", test_parameters.UrlServiceDoesNotExist),}, &total_issues, time.Duration(1) * time.Second)
-    if !(len(total_issues) == 1 && total_issues[0] == fmt.Sprintf("Get http://%s: net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)", test_parameters.UrlServiceDoesNotExist)) {
-        print(total_issues[0])
+    totalIssues := []string{}
+    waitGroup.Add(1)
+    go heartbeatUrls(&waitGroup, []string{fmt.Sprintf("http://%s", testParameters.UrlServiceDoesNotExist),}, &totalIssues, time.Duration(1) * time.Second)
+    waitGroup.Wait()
+    if !(len(totalIssues) == 1 && totalIssues[0] == fmt.Sprintf("Get http://%s: net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)", testParameters.UrlServiceDoesNotExist)) {
+        print(totalIssues[0])
         t.Fatalf("The time-out did not trigger an alert.")
     }
 }
 
 func TestTcpBase (t *testing.T) {
-    total_issues := []string{}
-    heartbeat_tcp([]string{test_parameters.TcpEndpointAlwaysWorking}, &total_issues, time.Duration(1) * time.Second)
-    if len(total_issues) > 0 {
+    totalIssues := []string{}
+    waitGroup.Add(1)
+    go heartbeatTcp(&waitGroup, []string{testParameters.TcpEndpointAlwaysWorking}, &totalIssues, time.Duration(1) * time.Second)
+    waitGroup.Wait()
+    if len(totalIssues) > 0 {
         t.Fatalf("The endpoint is not live as expected.")
     }
 }
 
 func TestTcpEmpty (t *testing.T) {
-    total_issues := []string{}
-    heartbeat_tcp([]string{}, &total_issues, time.Duration(1) * time.Second)
+    totalIssues := []string{}
+    waitGroup.Add(1)
+    go heartbeatTcp(&waitGroup, []string{}, &totalIssues, time.Duration(1) * time.Second)
+    waitGroup.Wait()
 }
 
 func TestTcpDoesNotExist (t *testing.T) {
-    total_issues := []string{}
-    heartbeat_tcp([]string{test_parameters.TcpEndpointNeverWorking,}, &total_issues, time.Duration(1) * time.Second)
-    if !(len(total_issues) == 1 && total_issues[0] == fmt.Sprintf("dial tcp %s: i/o timeout", test_parameters.TcpEndpointNeverWorking)) {
+    totalIssues := []string{}
+    waitGroup.Add(1)
+    go heartbeatTcp(&waitGroup, []string{testParameters.TcpEndpointNeverWorking,}, &totalIssues, time.Duration(1) * time.Second)
+    waitGroup.Wait()
+    if !(len(totalIssues) == 1 && totalIssues[0] == fmt.Sprintf("dial tcp %s: i/o timeout", testParameters.TcpEndpointNeverWorking)) {
         t.Fatalf("The non-existing service did not trigger an alert.")
     }
 }

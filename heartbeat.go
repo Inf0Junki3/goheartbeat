@@ -11,6 +11,7 @@ import (
     "net"
     "net/http"
     "strings"
+    "sync"
     "time"
 )
 
@@ -23,38 +24,44 @@ type Config struct {
 
 func main(){
     
-    config_file_path := flag.String("c", "/etc/heartbeat.config", "The heartbeat config file. Defaults to /etc/heartbeat.config")
+    configFilePath := flag.String("c", "/etc/heartbeat.config", "The heartbeat config file. Defaults to /etc/heartbeat.config")
     flag.Parse()
     
-    config := read_config(*config_file_path)
+    config := readConfig(*configFilePath)
 
-    total_issues := []string{}
+    totalIssues := []string{}
     
     logWriter, err := syslog.New(syslog.LOG_ALERT, "heartbeat")
     if err == nil {
         log.SetOutput(logWriter)
     }
     
-    for {
-        heartbeat_urls(config.Urls, &total_issues, time.Duration(config.TimeoutSeconds) * time.Second)
-        heartbeat_tcp(config.TcpEndpoints, &total_issues, time.Duration(config.TimeoutSeconds) * time.Second)
+    var waitGroup sync.WaitGroup
 
-        if len(total_issues) > 0{
-            log.Print(strings.Join(total_issues, "\n"))
+    for {
+        go heartbeatUrls(&waitGroup, config.Urls, &totalIssues, time.Duration(config.TimeoutSeconds) * time.Second)
+        waitGroup.Add(1)
+        go heartbeatTcp(&waitGroup, config.TcpEndpoints, &totalIssues, time.Duration(config.TimeoutSeconds) * time.Second)
+        waitGroup.Add(1)
+
+        waitGroup.Wait()
+
+        if len(totalIssues) > 0{
+            log.Print(strings.Join(totalIssues, "\n"))
         }
         
         time.Sleep(time.Duration(config.HeartbeatIntervalSeconds) * time.Second)
     }
 }
 
-func read_config(config_path string) Config {
-    config_json, err := ioutil.ReadFile(config_path)
+func readConfig(configPath string) Config {
+    configJson, err := ioutil.ReadFile(configPath)
     if err != nil {
         panic(err)
     }
 
     var config Config
-    if err := json.Unmarshal(config_json, &config); err != nil {
+    if err := json.Unmarshal(configJson, &config); err != nil {
         panic(err)
     }
 
@@ -69,31 +76,34 @@ func read_config(config_path string) Config {
     return config
 }
 
-func heartbeat_urls(urls []string, issues *[]string, timeout time.Duration) {
+func heartbeatUrls(waitGroup *sync.WaitGroup, urls []string, issues *[]string, timeout time.Duration) {
+    defer waitGroup.Done()
+
     client := http.Client{
         Timeout: timeout,
     }
     
-    for _, cur_site := range urls {
-        response, err := client.Get(cur_site)
+    for _, curSite := range urls {
+        response, err := client.Get(curSite)
 
         if err != nil {
             print(fmt.Sprintf("Ooops. %s\n", err))
             *issues = append(*issues, err.Error())
         } else {
-            print(fmt.Sprintf("%s: %s\n", cur_site, response.Status))
+            print(fmt.Sprintf("%s: %s\n", curSite, response.Status))
         }
     }
 }
 
-func heartbeat_tcp(endpoints []string, issues *[]string, timeout time.Duration) {
-    for _, cur_endpoint := range(endpoints) {
-        conn, err := net.DialTimeout("tcp", cur_endpoint, timeout)
+func heartbeatTcp(waitGroup *sync.WaitGroup, endpoints []string, issues *[]string, timeout time.Duration) {
+    defer waitGroup.Done()
+    for _, curEndpoint := range(endpoints) {
+        conn, err := net.DialTimeout("tcp", curEndpoint, timeout)
         if err != nil {
             print(fmt.Sprintf("Oops. %s\n", err))
             *issues = append(*issues, err.Error())
         } else {
-            print(fmt.Sprintf("Connection to %s successful.\n", cur_endpoint))
+            print(fmt.Sprintf("Connection to %s successful.\n", curEndpoint))
             conn.Close()
         }
     }
