@@ -134,7 +134,7 @@ func TestUrlDoesNotExist (t *testing.T) {
                    &totalIssues,
                    time.Duration(1) * time.Second)
     waitGroup.Wait()
-    if !(len(totalIssues) == 1 && totalIssues[0] == fmt.Sprintf("Get http://%s: dial tcp: lookup www.thisdoesntexist.local: no such host", testParameters.UrlDomainDoesNotExist)) {
+    if !(len(totalIssues) == 1 && (strings.Contains(totalIssues[0], "no such host") || strings.Contains(totalIssues[0], "Temporary failure in name resolution"))) {
         t.Fatalf("The non-existing URL did not trigger an alert.")
     }
 }
