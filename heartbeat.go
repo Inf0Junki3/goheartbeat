@@ -91,6 +91,7 @@ func heartbeatUrls(waitGroup *sync.WaitGroup, urls []string, issues *[]string, t
             *issues = append(*issues, err.Error())
         } else {
             print(fmt.Sprintf("%s: %s\n", curSite, response.Status))
+            response.Body.Close()
         }
     }
 }
