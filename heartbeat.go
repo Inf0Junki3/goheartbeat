@@ -48,6 +48,7 @@ func main(){
 
         if len(totalIssues) > 0{
             log.Print(strings.Join(totalIssues, "\n"))
+            totalIssues = []string{}
         }
         
         time.Sleep(time.Duration(config.HeartbeatIntervalSeconds) * time.Second)
